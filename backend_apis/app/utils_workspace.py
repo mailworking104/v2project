@@ -20,31 +20,26 @@ import uuid
 from datetime import date
 from googleapiclient.http import HttpError, MediaIoBaseUpload
 from googleapiclient.http import MediaIoBaseDownload
-from googleapiclient.discovery import build
 
 
 def create_folder_in_folder(
-        credentials,
+        drive_service,
         folder_name: str, 
         parent_folder_id: str
     ):
-    drive_service = build('drive', 'v3', credentials=credentials)
-
     file_metadata = {
         'name' : folder_name,
         'parents' : [parent_folder_id],
         'mimeType' : 'application/vnd.google-apps.folder'
     }
     file = drive_service.files().create(body=file_metadata,
-                                    fields='id',
-                                    supportsAllDrives=True).execute(num_retries=20)
-    drive_service.close()
+                                    fields='id').execute()
+    
     return file.get('id')
 
 
-def download_file(credentials, file_id: str) -> bytes | None:
+def download_file(drive_service, file_id: str) -> bytes | None:
     try:
-        drive_service = build('drive', 'v3', credentials=credentials)
         request = drive_service.files().get_media(fileId=file_id)
         file = io.BytesIO()
         downloader = MediaIoBaseDownload(file, request)
@@ -55,36 +50,31 @@ def download_file(credentials, file_id: str) -> bytes | None:
     except HttpError as error:
         print(f'An error occured: {error}')
         return None
-    drive_service.close()
     return file.getvalue()
 
 
 def copy_drive_file(
-        credentials,
+        drive_service,
         drive_file_id: str,
         parentFolderId: str,
         copy_title: str):
-    drive_service = build('drive', 'v3', credentials=credentials)
     body = {
         'name': copy_title,
         'parents' : [parentFolderId]
     }
     drive_response = drive_service.files().copy(
-        fileId=drive_file_id, 
-        body=body,
-        supportsAllDrives=True).execute(num_retries=20)
+        fileId=drive_file_id, body=body).execute()
     presentation_copy_id = drive_response.get('id')
-    drive_service.close()
+
     return presentation_copy_id
 
 
 def upload_to_folder(
-        credentials,
+        drive_service,
         f,
         folder_id, 
         upload_name, 
         mime_type):
-    drive_service = build('drive', 'v3', credentials=credentials)
     """Upload a file to the specified folder and prints file ID, folder ID
     Args: Id of the folder
     Returns: ID of the file uploaded"""
@@ -100,14 +90,13 @@ def upload_to_folder(
     file = drive_service.files().create(
         body=file_metadata, 
         media_body=media,
-        fields='id',
-        supportsAllDrives=True).execute(num_retries=20)
-    drive_service.close()
+        fields='id').execute()
+
     return file.get('id')
 
 
 def update_doc(
-        credentials,
+        docs_service,
         document_id: str,
         campaign_name: str,
         business_name: str, 
@@ -115,7 +104,6 @@ def update_doc(
         brand_statement: str, 
         primary_msg: str, 
         comms_channel: str):
-    docs_service = build('docs', 'v1', credentials=credentials)
     
     requests = [
             {
@@ -168,33 +156,31 @@ def update_doc(
             }}
     ]
     docs_service.documents().batchUpdate(
-        documentId=document_id, body={'requests': requests}).execute(num_retries=20)
+        documentId=document_id, body={'requests': requests}).execute()
 
 
 def set_permission(
-        credentials,
+        drive_service,
         file_id: str):
-    drive_service = build('drive', 'v3', credentials=credentials)
+    
     permission = {'type': 'domain',
                 'domain': 'google.com', 
                 'role': 'writer'}
     return drive_service.permissions().create(fileId=file_id,
                                         sendNotificationEmail=False,
-                                        body=permission,
-                                        supportsAllDrives=True).execute(num_retries=20)
+                                        body=permission).execute()
 
 
 def get_chart_id(
-        credentials,
+        sheets_service,
         spreadsheet_id):
-    sheets_service = build('sheets', 'v4', credentials=credentials)
     spreadsheet_id = spreadsheet_id  
     ranges = [] 
     include_grid_data = False 
     request = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id,
                                             ranges=ranges,
                                             includeGridData=include_grid_data)
-    response = request.execute(num_retries=20)
+    response = request.execute()
 
     chart_id_list = []
     for chart in response['sheets'][0]['charts']:
@@ -204,7 +190,7 @@ def get_chart_id(
 
 
 def merge_slides(
-        credentials,
+        slides_service,
         presentation_id: str, 
         spreadsheet_id: str,
         spreadsheet_template_id: str,
@@ -213,9 +199,8 @@ def merge_slides(
         'magnitude': 4000000,
         'unit': 'EMU'
     }
-    sheets_service = build('sheets', 'v4', credentials=credentials)
-    slides_service = build('slides', 'v1', credentials=credentials)
-    sheet_chart_id_list = get_chart_id(sheets_service,
+
+    sheet_chart_id_list = get_chart_id(
         spreadsheet_template_id)
 
     today = date.today()
@@ -260,11 +245,11 @@ def merge_slides(
         'requests': requests
     }
     slides_service.presentations().batchUpdate(
-        presentationId=presentation_id, body=body).execute(num_retries=20)
+        presentationId=presentation_id, body=body).execute()
 
 
 def create_sheets_chart(
-        credentials,
+        slides_service,
         presentation_id: str, 
         page_id: str,
         spreadsheet_id: str, 
@@ -273,7 +258,7 @@ def create_sheets_chart(
         'magnitude': 1000000,
         'unit': 'EMU'
     }
-    slides_service = build('slides', 'v1', credentials=credentials)
+
     presentation_chart_id = 'MyEmbeddedChart'
     requests = [
         {
@@ -305,54 +290,6 @@ def create_sheets_chart(
         'requests': requests
     }
     response = slides_service.presentations().batchUpdate(
-        presentationId=presentation_id, body=body).execute(num_retries=20)
+        presentationId=presentation_id, body=body).execute()
     
     return response
-
-def create_doc(
-        credentials,
-        folder_id: str,
-        doc_name: str, 
-        text: str):
-    docs_service = build('docs', 'v1', credentials=credentials)
-    title = doc_name
-    body = {
-        'title': title
-    }
-    doc = docs_service.documents().create(body=body).execute(num_retries=20)
-    title = doc.get('title')
-    _id = doc.get('documentId')
-    print(f'Created document with title: {title}, id: {_id}')
-
-    # Text insertion
-    requests = [
-         {
-            'insertText': {
-                'location': {
-                    'index': 1,
-                },
-                'text': text
-            }
-        }
-    ]
-    docs_service.documents().batchUpdate(documentId=_id, body={'requests': requests}).execute(num_retries=20)
-    move_drive_file(credentials=credentials,drive_file_id=_id,parentFolderId=folder_id,copy_title=title)
-    return _id
-
-def move_drive_file(
-        credentials,
-        drive_file_id: str,
-        parentFolderId: str,
-        copy_title: str):
-    drive_service = build('drive', 'v3', credentials=credentials)
-    body = {
-        'name': copy_title,
-        'parents' : [parentFolderId]
-    }
-    drive_response = drive_service.files().copy(
-        fileId=drive_file_id, 
-        body=body,
-        supportsAllDrives=True).execute(num_retries=20)
-    presentation_copy_id = drive_response.get('id')
-
-    return presentation_copy_id
