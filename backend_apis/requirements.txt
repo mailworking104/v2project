@@ -27,6 +27,4 @@ python-multipart
 firebase-admin
 pyrebase4
 google-cloud-secret-manager
-google-cloud-translate
-google-cloud-storage
-google-auth
+

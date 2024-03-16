@@ -22,6 +22,7 @@ from firebase_admin import firestore,credentials, auth
 import os
 from .body_schema import Campaign, CampaignList
 import json
+from google.cloud import secretmanager
 import tomllib
 import google.oauth2.id_token
 import google.auth.transport.requests
@@ -32,6 +33,15 @@ HTTP_REQUEST = google.auth.transport.requests.Request()
 # Load configuration file
 with open("/code/app/config.toml", "rb") as f:
     config = tomllib.load(f)
+
+
+# Fetch Secret Configuration
+secret_client = secretmanager.SecretManagerServiceClient()
+secret_name = config['global']['secret_name']
+secret_response = secret_client.access_secret_version(name=secret_name)
+firebaseConfig = secret_response.payload.data.decode("UTF-8")
+
+firebaseConfig = json.loads(firebaseConfig)
 
 # Application Default credentials are automatically created.
 app = firebase_admin.initialize_app()
@@ -65,13 +75,9 @@ def create_campaign(user_id,campaign:Campaign):
     return update_time,campaign_ref.id
 
 
-def read_campaign(user_id,campaign_id):
-    campaign_ref = db.collection("users").document(user_id).collection("campaigns").document(campaign_id)
-    camp = campaign_ref.get()
-    if camp.exists:
-        return camp.to_dict()
-    else:
-        return {}
+def read_campaign(user_id,campaignid):
+    campaign_ref = db.collection("users").document(user_id).collection("campaigns").document(campaignid)
+    return campaign_ref.to_dict()
 
 def list_campaigns(user_id):
     campaign_col = db.collection("users").document(user_id).collection("campaigns").stream()
@@ -88,18 +94,7 @@ def update_campaign(user_id,campaign_id,data:Campaign):
         print("Updating Campaign")
         camp_ref.set(json.loads(json.dumps(data.__dict__,default=to_serializable)))
         return f"{campaign_id} Campaign is updated."
-
-def update_status(user_id,campaign_id,key,status):
-    camp_ref = db.collection("users").document(user_id).collection("campaigns").document(campaign_id)
-    if camp_ref.get().exists:
-        if key == "":
-            camp_ref.update({"status" : status})
-            return f"{campaign_id} Campaign Status Updated."
-        print("Updating Status for",key)
-        camp_ref.update({key+".status" : status})
-        return f"{campaign_id} Campaign {key} is Activated."
     
-        
 def delete_campaign(user_id,campaign_id):
     camp_ref = db.collection("users").document(user_id).collection("campaigns").document(campaign_id)
     if camp_ref.get().exists:
